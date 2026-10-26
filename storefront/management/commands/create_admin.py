@@ -1,35 +1,41 @@
+
 import os
 
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 
 class Command(BaseCommand):
-    help = "Create an admin user from environment variables if one does not exist."
+    help = "Create the initial Django admin account"
 
     def handle(self, *args, **options):
-        User = get_user_model()
-
         username = os.environ.get("DJANGO_SUPERUSER_USERNAME")
         email = os.environ.get("DJANGO_SUPERUSER_EMAIL")
         password = os.environ.get("DJANGO_SUPERUSER_PASSWORD")
 
         if not all([username, email, password]):
-            self.stderr.write(
-                "Admin environment variables are not fully configured."
+            raise CommandError(
+                "Set all DJANGO_SUPERUSER environment variables."
             )
-            return
 
-        user, created = User.objects.get_or_create(
-            username=username,
-            defaults={"email": email},
+        User = get_user_model()
+
+        if User.objects.filter(**{User.USERNAME_FIELD: username}).exists():
+            raise CommandError(
+                "This username or login identifier already exists. "
+                "No account was changed."
+            )
+
+        user = User.objects.create_superuser(
+            **{
+                User.USERNAME_FIELD: username,
+                "email": email,
+                "password": password,
+            }
         )
 
-        if created:
-            user.set_password(password)
-            user.is_staff = True
-            user.is_superuser = True
-            user.save()
-            self.stdout.write(self.style.SUCCESS("Admin user created."))
-        else:
-            self.stdout.write("Admin user already exists; no changes made.")
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Superuser {user} created successfully."
+            )
+        )
